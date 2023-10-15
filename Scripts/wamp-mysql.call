@@ -1,0 +1,5 @@
+Channel: SIP/4003
+WaitTime: 10
+Context: wamp-mysql
+Extension: s
+Priority: 1

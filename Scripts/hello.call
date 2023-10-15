@@ -1,0 +1,7 @@
+Channel: SIP/gw280/996619302
+MaxRetries: 1
+RetryTime: 60
+WaitTime: 30
+Context: ura-reversa
+Extension: s
+Priority: 1

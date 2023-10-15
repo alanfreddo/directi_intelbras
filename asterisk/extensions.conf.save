@@ -1,0 +1,290 @@
+[general] 
+static=yes 
+writeprotec=no 
+autofallthrough=no 
+clearglobalvars=no 
+language=pt_BR
+
+[ramais] 
+
+include => local-sip  
+include => fixo-ddd ; Contexto para ligações fixo DDD 
+include => gsm-local ; Contexto para ligações GSM local 
+include => gsm-ddd ; Contexto para ligações GSM DDD 
+include => pesquisa-satisfacao
+
+[local-sip] 
+
+exten => 5555,1,NoOp(Local-sip) ; Mascara de discagem para ramais internos
+        same => n,Dial(SIP/4002,30,Tt); Discagem para ramal local
+        same => n,Congestion(3) ; Tom de ocupado
+        same => n,Hangup(); Encerrando a ligação
+
+;exten => h,1,Goto(pesquisa-satisfacao,99,3)
+
+
+;Encaminha para URA 
+
+exten => 4000,1,Goto(uraprincipal,s,1) ;Encaminha para a URA ;RAMAIS LOCAIS 
+
+exten => _4XXX,1,NoOp(Local-sip) ; Mascara de discagem para ramais internos
+	same => n,Dial(SIP/${EXTEN},30,Tt); Discagem para ramal local
+	same => n,Congestion(3) ; Tom de ocupado
+	same => n,Hangup(); Encerrando a ligação 
+
+[filial-sc] ; LIGAÇÃO PARA FILIAR SC 
+
+exten => _5XXX,1,NoOp(LIGAÇÃO PARA UNIDADE - SC) ; Mascara de discagem para ramais da filial SC
+	same => n,Dial(IAX2/SC/${EXTEN},30,Tt); Discagem para ramal da filial SC
+	same => n,Congestion(3) ; Tom de ocupado
+	same => n,Hangup() ; Encerrando a ligação 
+
+[fixo-local] 
+
+exten => _[2-5]XXXXXXX,1,NoOp(FIXO LOCAL - SAO PAULO); Mascara de discagem para fixo local
+        same => n,Dial(30,Tt) ; Falta verificar por onde a ligação vai sair
+        same => n,Congestion(3) ; Tom de ocupado
+        same => n,Hangup() ; Encerramento da chamada 
+
+[fixo-ddd] 
+
+exten => _048[2-5]XXXXXXX,1,NoOp(FIXO DDD - FLORIANOPOLIS) ; Mascara de discagem para fixo DDD saindo pela unidade de SC
+        same => n,Dial(IAX2/SC/${EXTEN},30,Tt) ; Encaminhando a ligação do fixo DDD para a filial de SC para sair com menor custo
+        same => n,Congestion(3); Tom de ocupado
+        same => n,Hangup() ; Encerramento da chamada 
+
+exten => _0ZZ[2-5]XXXXXXX,1,NoOp(FIXO DDD) ; Mascara de discagem para fixo DDD
+        same => n,Dial(,30,Tt); Falta verificar por onde a ligação vai sair
+        same => n,Congestion(3); Tom de ocupado
+        same => n,Hangup(); Encerramento da chamada 
+
+[gsm-local] 
+
+exten => _9XXXXXXXX,1,NoOp(GSM LOCAL) ; Mascara de discagem para GSM local
+        same => n,Dial(,30,Tt); Falta verificar por onde a ligação vai sair
+        same => n,Congestion(3) ; Tom de ocupado
+        same => n,Hangup(); Encerramento da chamada 
+
+[gsm-ddd] 
+
+exten => _0489XXXXXXXX,1,NoOp(GSM DDD - FLORIANOPOLIS); Mascara de discagem para GSM DDD saindo pela unidade de SC
+        same => n,Dial(IAX2/SC/${EXTEN},30,Tt) ; Encaminhando a ligação do GSM DDD para a filial de SC para sair com menor custo
+        same => n,Congestion(3); Tom de ocupado
+        same => n,Hangup(); Encerramento da chamada 
+
+exten => _0ZZ9XXXXXXXX,1,NoOp(GSM DDD) ; Mascara de discagem para GSM DDD
+        same => n,Dial(,30,Tt); Falta verificar por onde a ligação vai sair
+        same => n,Congestion(3); Tom de ocupado
+        same => n,Hangup(); Encerramento da chamada 
+
+[entradafiliais]; Contexto de ligações recebidas pela unidade SC 
+
+include => local-sip ; Contexto ramais locais 
+include => fixo-local-sp ; Contexto das ligações fixo local SP 
+include => gsm-local-sp ; Contexto das ligações GSM local SP recebidas da unidade SC com menor custo 
+
+[fixo-local-sp] 
+exten => _011[2-5]XXXXXXX,1,NoOp(FIXO LOCAL - SC PARA SP) ; Contexto 
+        same => n,Dial(,30,Tt); Falta verificar por onde a ligação vai sair
+	same => n,Congestion(3); Tom de ocupado
+        same => n,Hangup(); Encerramento da chamada 
+[gsm-local-sp] 
+exten => _0119XXXXXXXX,1,NoOp(GSM LOCAL - SC PARA SP) ; Contexto para ligações fixo local SP, recebidas da unidade SC.
+        same => n,Dial(,30,Tt);Falta verificar por onde a ligação vai sair
+        same => n,Congestion(3); Tom de ocupado
+        same => n,Hangup(); Encerramento da chamada 
+
+;Pesquisa de satisfação
+
+[pesquisa-satisfacao]
+
+exten => 99,1,NoOp(PESQUISA DE SATISFACAO)
+;	same => n,AGI(phpagi.php)
+;        same => n,NoCDR()
+	same => n,MYSQL(connect connid 127.0.0.1 root disc-os asterisk)
+	same => n,MYSQL(query resultid ${connid} SELECT * FROM `pesquisa`)
+	same => n,MYSQL(query ${resultid} ${connid} INSERT INTO `pesquisa` (`ID`, `Hora`, `Origem`, `Atendente`, `Ramal`, `Nota`) VALUES ('1', '', '${CALLERID(num)}', '${CALLERID(name)}', '', '');
+	
+	same => n,NoOp(${connid})
+        same => n(inicio),Wait(0.5)
+        same => n,Read(nota,pesquisa-satisfacao,1,,2,2)
+        same => n,NoOp(NOTA -> ${nota})
+        same => n,GotoIf($["${nota}" = ""]?desliga)
+        same => n,GotoIf($["${nota}" >= "1" & "${nota}" <= "9"]?avalicao:invalida)
+
+        same => n(avalicao),System(echo "Data: ${STRFTIME(${EPOCH},,%d-%m-%Y - Hora: %H:%M:%S)} - Atendente: ${CALLERID(name)} - Ramal: ${CALLERID(num)} - Nota: ${nota}" >> /home/intelbras/teste.txt)
+	same => n,NoOp(STATUS - ${SYSTEMSTATUS})
+;        same => n,Wait(1)
+        same => n,Congestion(3)
+        same => n,Hangup()
+
+;        same => n(invalida),Playback(pesquisa-satisfacao/numero-invalido)
+;        same => n,Goto(inicio)
+
+;        same => n(desliga),Wait(1)
+;        same => n,Congestion(3)
+;        same => n,Hangup()
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ; ; URA DE ATENDIMENTO ; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
+
+[uraprincipal] 
+
+exten =>s,1,NoOp(INICIO - URA)
+	same => n,Playback(bem-vindo-senha); Mensagem de boas vindas
+	same => n,Authenticate(/etc/asterisk/password/senha,ma,4) ; Solicitação de senha para acessar a URA
+	same => n,NoOp("Senha do usuario = "${CDR(accountcode)}); CDR(accountcode indica qual usuário realizou o login
+	same => n,GotoIf($[${CDR(accountcode)} = fabio]?fabio) ; Caso a senha inserida seja do sr. Fabio encaminhara para a label fabio
+	same => n,GotoIf($[${CDR(accountcode)} = gabriel]?gabriel); Caso a senha inserida seja do sr. Gabriel encaminhara para a label gabriel
+	same => n(fabio),NoOp(USUARIO FABIO ESTA LOGADO) ; Encaminhado para a label Fabio;
+	same => n,GotoIfTime(06:00-11:59,*,*,*?bom-dia-fabio); Ligação recebida entre 06:00 até 11:59 emite uma mensagem de bom dia
+	same => n,GotoIfTime(12:00-18:59,*,*,*?boa-tarde-fabio); Ligação recebida entre 12:00 até 18:59 emite uma mensagem de bom tarde
+	same => n,GotoIfTime(19:00-23:59,*,*,*?boa-noite-fabio); Ligação recebida entre 19:00 até 23:59 emite uma mensagem de boa noite
+	same => n,GotoIfTime(00:00-05:59,*,*,*?boa-noite-fabio); Ligação recebida entre 00:00 até 05:59 emite uma mensagem de boa noite
+	same => n(bom-dia-fabio),Playback(bom-dia-fabio); Emite a mensagem de bom dia Fabio
+	same => n,Goto(menu-principal,s,1); Encaminha para o contexto menu principal
+	same => n(boa-tarde-fabio),Playback(boa-tarde-fabio); Emite a mensagem de boa tarde Fabio
+        same => n,Goto(menu-principal,s,1) ; Encaminha para o contexto menu principal
+	same => n(boa-noite-fabio),Playback(boa-noite-fabio); Emite a mensagem de boa noite Fabio
+        same => n,Goto(menu-principal,s,1); Encaminha para o contexto menu principal
+	same => n(gabriel),NoOp(USUARIO GABRIEL ESTA LOGADO); Encaminhado para a label Gabriel
+        same => n,GotoIfTime(06:00-11:59,*,*,*?bom-dia-gabriel); Ligação recebida entre 06:00 até 11:59 emite uma mensagem de bom dia
+        same => n,GotoIfTime(12:00-18:59,*,*,*?boa-tarde-gabriel); Ligação recebida entre 12:00 até 18:59 emite uma mensagem de bom tarde
+        same => n,GotoIfTime(19:00-23:59,*,*,*?boa-noite-gabriel); Ligação recebida entre 19:00 até 23:59 emite uma mensagem de boa noite
+        same => n,GotoIfTime(00:00-05:59,*,*,*?boa-noite-gabriel); Ligação recebida entre 00:00 até 05:59 emite uma mensagem de boa noite
+	same => n(bom-dia-gabriel),Playback(bom-dia-gabriel); Emite a mensagem de bom dia Gabriel
+        same => n,Goto(menu-principal,s,1)); Encaminha para o contexto menu principal
+        same => n(boa-tarde-gabriel),Playback(boa-tarde-gabriel); Emite a mensagem de boa tarde Gabriel
+        same => n,Goto(menu-principal,s,1)); Encaminha para o contexto menu principal
+        same => n(boa-noite-gabriel),Playback(boa-noite-gabriel); Emite a mensagem de boa noite Gabriel
+        same => n,Goto(menu-principal,s,1)); Encaminha para o contexto menu principal 
+
+[menu-principal] 
+
+exten => s,1(inicio),NoOp(MENU PRINCIPAL)
+	same => n,Wait(1); Tempo para iniciar a mensagem
+	same => n,Background(menu-principal); Mensagem do menu-principal
+	same => n,WaitExten(5); Tempo de espera para digitar uma opção 
+	
+exten => 1,1,NoOp(SUB - MENU 1);Opcão 1
+	same => n,Goto(sub-menu1,s,1); Encaminha para o contexto sub-menu1 
+	
+exten => 3,1,NoOp(SUB - MENU 2); Opção 3
+	same => n,Goto(sub-menu2,s,1); Encaminha para o contexto sub-menu2 
+	
+exten => i,1,NoOp(OPCAO INVALIDA); Opção inválida
+	same => n,Wait(0.5); Tempo para iniciar a mensagem abaixo
+        same => n,Playback(opcao-invalida); Emite mensagem de opção invalida
+        same => n,Goto(s,inicio); Encaminha para a label inicio do menu-principal 
+	
+exten => t,1,NoOp(TEMPO ESGOTADO PARA DIGITAR UMA OPCAO); Tempo esgotado de 5 segundos para digitar uma opção
+        same => n,Goto(s,inicio) ;Encaminha para a label inicio do menu-principal
+	
+[sub-menu1] 
+
+exten => s,1(inicio),NoOp(OPCAO 1 - SUB-MENU 1)
+	same => n,Wait(1); Tempo para inicar a mensagem abaixo
+        same => n,Background(sub-menu1); Emite mensagem do sub-menu1
+	same => n,WaitExten(5); Tempo de espera para digitar uma opção 
+
+exten => 1,1,NoOp(STATUS SERVICO WEB); Opção 1
+	same => n,System(ssh root@xxx.xxx.xxx.xxx sh /root/status.sh); Executa o script status.sh no servidor WEB com IP xxx.xxx.xxx.xxx
+        same => n,NoOp(STATUS DO COMANDO SYSTEM => ${SYSTEMSTATUS}); Retorno atatus do comando System
+	same => n,GotoIf($[${SYSTEMSTATUS} = SUCESS]?sucesso-satus); SUCESS = Comando System executado com sucesso, encaminha para a label sucesso-status
+	same => n,GotoIf($[${SYSTEMSTATUS} = FAILED]?falha-status); FAILED = Comando System falhou ao executar, encaminha para a label falha-satus
+        same => n,GotoIf($[${SYSTEMSTATUS} = APPERROR]?sem-acesso-status); APPERROR = Comando System sem acesso ao arquivo do servidor WEB, encaminha label sem-acesso-status
+        same => n(sucesso-status),Set(consulta=${SHELL(ssh root@10.13.190.20 cat /root/status.txt)}); Label sucesso-status, Verifica o status do servidor WEB
+        same => n,GotoIf($[${consulta} = ativo]?ativo) ; Caso esteja ativo encaminha para a label ativo
+        same => n,GotoIf($[${consulta} = parado]?parado); Caso esteja parado encaminha para a label parado
+        same => n(falha-status),Wait(1); Label falha-status
+	same => n,Playback(falha-status) ; Mensagem de falha ao executar executar o comando System
+        same => n,Wait(3); Tempo de espera
+        same => n,Goto(sub-menu1,s,1); Encaminha para o sub-menu1
+        same => n(sem-acesso-status),Wait(1); Label sem-acesso-status
+	same => n,Playback(sem-acesso-status) ; Mensagem de sem acesso ao status do servidor WEB
+        same => n,Wait(3); Tempo de espera
+        same => n,Goto(sub-menu1,s,1); Encaminha para o sub-menu1
+	same => n(ativo),Wait(1); Label serviço WEB ativo
+        same => n,Playback(ativo); Mensagem do serviço WEB ativo
+        same => n,Wait(1); Tempo de espera
+        same => n,Goto(sub-menu1,s,1); Encaminha para o sub-menu1
+        same => n(parado),Wait(1); Label serviço WEB parado
+        same => n,Background(parado); Mensagm do serviço WEB parado, informa se o cliente solicita inciar o serviço WEB
+        same => n,WaitExten(5); Tempo de espera para digitar a opção desejado
+        same => n,Goto(sub-menu1,s,1); Encaminh para o sub-menu1 
+
+exten => 2,1,NoOp(REINICIAR O SERVICO WEB); Opção 2
+	same => n,System(ssh root@xxx.xxx.xxx.xxx sh /root/restart_http.sh); Executa o script restart_http.sh para reiniciar o serviço WEB
+	same => n,NoOp(STATUS DO COMANDO SYSTEM => ${SYSTEMSTATUS}); Retorna status do comando System
+	same => n,GotoIf($[${SYSTEMSTATUS} = SUCESS]?sucesso); SUCESS = Comando System executado com sucesso, encaminha para a label sucesso
+	same => n,GotoIf($[${SYSTEMSTATUS} = FAILED]?falha); FAILED = Comando System falhou ao executar, encaminha para a label falha
+	same => n,GotoIf($[${SYSTEMSTATUS} = APPERROR]?sem-acesso); APPERROR = Comando System sem acesso ao arquivo do servidor WEB, encaminha label sem-acesso
+	same => n(sucesso),Wait(1); Label sucesso
+	same => n,Playback(reiniciar-servico); Mensagem que o serviço WEB foi reiniciado com sucesso
+	same => n,Wait(3); Tempo de espera
+	same => n,Goto(sub-menu1,s,1); Encaminha para o sub-menu1
+	same => n(falha),Wait(1); Label Falha
+	same => n,Playback(falha-servico); Mensagem de falha ao tentar reinicar o serviço WEB
+	same => n,Wait(3); Tempo de espera
+	same => n,Goto(sub-menu1,s,1); Encaminha para o sub-menu1
+	same => n(sem-acesso),Wait(1); Label sem acesso
+	same => n,Playback(sem-acesso-servico); Mensagem que estamos sem acesso ao serviço WEB
+        same => n,Wait(3); Tempo de espera
+        same => n,Goto(sub-menu1,s,1); Encaminha para o sub-menu1 
+
+exten => 5,1,NoOp(REINICIAR O SERVIDOR); Opção 5
+	same => n,System(ssh root@xxx.xxx.xxx.xxx sh /root/reboot.sh); Executa o script para reinicar o servidor WEB
+	same => n,NoOp(STATUS DO COMANDO SYSTEM => ${SYSTEMSTATUS}); Retorna status do comando System
+	same => n,GotoIf($[${SYSTEMSTATUS} = SUCESS]?sucesso-reiniciar); SUCESS = Comando System executado com sucesso, encaminha para a label sucesso-reiniciar
+        same => n,GotoIf($[${SYSTEMSTATUS} = FAILED]?falha-reiniciar); FAILED = Comando System falhou ao executar, encaminha para a label falha-reiniciar
+        same => n,GotoIf($[${SYSTEMSTATUS} = APPERROR]?sem-acesso-reiniciar); APPERROR = Comando System sem acesso ao arquivo do servidor WEB, encaminha label sem-acesso-reiniciar
+        same => n(sucesso-reiniciar),Wait(1); Label sucesso-reiniciar
+	same => n,Playback(reiniciar-servidor); Mensagem que o servidor WEB foi reiniciado com sucesso
+        same => n,Wait(3); Tempo de espera
+        same => n,Goto(sub-menu1,s,1); Encaminha para o sub-menu1
+        same => n(falha-reiniciar),Wait(1); Label falha-reiniciar
+	same => n,Playback(falha-servidor); Mensagem de falha ao tenta reiniciar o servidor WEB
+        same => n,Wait(3); Tempo de espera
+        same => n,Goto(sub-menu1,s,1); Encaminha para o sub-menu1
+	same => n(sem-acesso-reiniciar),Wait(1); Label sem-acesso-reiniciar
+	same => n,Playback(sem-acesso-servidor); Mensagem de sem acesso ao servidor WEB
+        same => n,Wait(3); Tempo de espera
+        same => n,Goto(sub-menu1,s,1); Encaminha para o sub-menu1 
+
+exten => 9,1,NoOp(RETORNAR PARA O MENU PRINCIPAL); Opção 9
+	same => n,Goto(menu-principal,s,1); Encaminha para o menu-principal 
+
+exten => i,1,NoOp(OPCAO INVALIDA); Opção inválida
+        same => n,Wait(0.5); Tempo para iniciar a mensagem abaixo
+        same => n,Playback(opcao-invalida); Emite mensagem de opção invalida
+        same => n,Goto(s,inicio); Encaminha para a label inicio do sub-menu1 
+
+exten => t,1,NoOp(TEMPO ESGOTADO PARA DIGITAR UMA OPCAO); Tempo esgotado de 5 segundos para digitar uma opção
+        same => n,Goto(s,inicio) ;Encaminha para a label inicio do sub-menu1 
+
+[sub-menu2] 
+
+exten => s,1(inicio),NoOp(OPCAO 3 - SUB-MENU 2)
+	same => n,Wait(1); Tempo para inicar a mensagem abaixo
+        same => n,Background(sub-menu2); Emite mensagem do sub-menu1
+	same => n,WaitExten(5); Tempo de espera para digitar uma opção 
+
+exten => 1,1,NoOp(CONFERENCIA PUBLICA); Opção 1
+	same => n,Dial(IAX2/SC/5000,30,Tt); Encaminha para unidade SC onde esta configurado a sala de conferência pública
+	same => n,Congestion(3); Tom de ocupado
+	same => n,Hangup(); Encerramento da chamada 
+
+exten => 3,1,,NoOp(CONFERENCIA PRIVADA); Opção 2
+	same => n,Dial(IAX2/SC/5001,30,Tt); Encaminha para unidade SC onde esta configurado a sala de conferência com senha
+	same => n,Congestion(3); Tom de ocupado
+	same => n,Hangup(); Encerramento da chamada 
+
+exten => 9,1,NoOp(RETORNAR PARA O MENU PRINCIPAL); Opção 9
+        same => n,Goto(menu-principal,s,1); Encaminha para o menu-principal 
+
+exten => i,1,NoOp(OPCAO INVALIDA); Opção inválida
+        same => n,Wait(0.5); Tempo para iniciar a mensagem abaixo
+        same => n,Playback(opcao-invalida); Emite mensagem de opção invalida
+        same => n,Goto(s,inicio); Encaminha para a label inicio do sub-menu2 
+
+exten => t,1,NoOp(TEMPO ESGOTADO PARA DIGITAR UMA OPCAO); Tempo esgotado de 5 segundos para digitar uma opção
+        same => n,Goto(s,inicio) ;Encaminha para a label inicio do sub-menu2

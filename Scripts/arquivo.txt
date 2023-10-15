@@ -1,0 +1,13 @@
+wampmysqld64 service is running.
+Configuration details:
+	Controls Accepted    = 0x7
+	Service Type         = 0x10
+	Start Type           = 0x3
+	Error Control        = 0x1
+	Tag ID               = 0x0
+	Executable Path      = c:\wamp\bin\mysql\mysql5.6.17\bin\mysqld.exe wampmysqld64
+	Load Order Group     = 
+	Dependencies         = /
+	Start Name           = LocalSystem
+	Display Name         = wampmysqld64
+ampapache64
